@@ -184,7 +184,7 @@ func handle(ctx context.Context, manager *provider.Manager, req request) respons
 		if err != nil {
 			return errorResponse(req.ID, "unknown_session", err)
 		}
-		issue, err := s.UpdateIssue(ctx, p.ID, p.Updates, p.Actor, p.Commit, p.Message)
+		issue, err := updateIssue(ctx, s, p)
 		return issueResponse(req.ID, "update_issue_failed", issue, err)
 	case "close_issue":
 		var p closeIssueParams
@@ -427,6 +427,126 @@ type dependencyParams struct {
 	IssueID     string                    `json:"issue_id,omitempty"`
 	DependsOnID string                    `json:"depends_on_id,omitempty"`
 	Actor       string                    `json:"actor,omitempty"`
+}
+
+func updateIssue(ctx context.Context, s *provider.Session, p updateIssueParams) (*backendplugin.Issue, error) {
+	updates := copyUpdates(p.Updates)
+	labels, hasLabels, err := labelsUpdate(updates)
+	if err != nil {
+		return nil, err
+	}
+	if hasLabels {
+		delete(updates, "labels")
+	}
+
+	if len(updates) > 0 {
+		if _, err := s.UpdateIssue(ctx, p.ID, updates, p.Actor, false, ""); err != nil {
+			return nil, err
+		}
+	}
+	if hasLabels {
+		if err := replaceLabels(ctx, s, p.ID, labels, p.Actor); err != nil {
+			return nil, err
+		}
+	}
+	if p.Commit {
+		message := p.Message
+		if message == "" {
+			message = "update issue " + p.ID
+		}
+		if err := s.Store.Commit(ctx, message); err != nil {
+			return nil, err
+		}
+	}
+	return s.GetIssue(ctx, p.ID)
+}
+
+func copyUpdates(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func labelsUpdate(updates map[string]any) ([]string, bool, error) {
+	raw, ok := updates["labels"]
+	if !ok {
+		return nil, false, nil
+	}
+	labels, err := stringSlice(raw)
+	if err != nil {
+		return nil, true, fmt.Errorf("labels update: %w", err)
+	}
+	return labels, true, nil
+}
+
+func stringSlice(raw any) ([]string, error) {
+	switch v := raw.(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return append([]string(nil), v...), nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			label, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("label value is %T, want string", item)
+			}
+			out = append(out, label)
+		}
+		return out, nil
+	case json.RawMessage:
+		var out []string
+		if err := json.Unmarshal(v, &out); err != nil {
+			return nil, err
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("value is %T, want string array", raw)
+	}
+}
+
+func replaceLabels(ctx context.Context, s *provider.Session, id string, labels []string, actor string) error {
+	current, err := s.GetLabels(ctx, id)
+	if err != nil {
+		return err
+	}
+	want := stringSet(labels)
+	have := stringSet(current)
+	for _, label := range current {
+		if _, ok := want[label]; !ok {
+			if err := s.RemoveLabel(ctx, id, label, actor); err != nil {
+				return err
+			}
+		}
+	}
+	for _, label := range labels {
+		if label == "" {
+			continue
+		}
+		if _, ok := have[label]; !ok {
+			if _, err := s.AddLabel(ctx, id, label, actor, false, ""); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func stringSet(values []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		out[value] = struct{}{}
+	}
+	return out
 }
 
 func issueResponse(id, code string, issue *backendplugin.Issue, err error) response {
