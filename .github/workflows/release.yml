@@ -361,12 +361,12 @@ jobs:
         run: gh release upload "${GITHUB_REF_NAME}" "${{ steps.assets.outputs.sbom }}" --clobber
 
       - name: Attest release artifacts
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4
         with:
           subject-checksums: ${{ steps.assets.outputs.checksums }}
 
       - name: Attest release SBOM
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4
         with:
           subject-checksums: ${{ steps.assets.outputs.checksums }}
           sbom-path: ${{ steps.assets.outputs.sbom }}
