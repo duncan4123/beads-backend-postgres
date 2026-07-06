@@ -1,0 +1,29 @@
+[package]
+name = "bts-conformance"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+# Standalone (out-of-workspace) copy of the bts-rs conformance harness, vendored
+# for Oracle A — the Go bd refactor-safety differential. The Rust SOURCE files
+# under src/ are verbatim from /data/projects/bts-rs/crates/bts-conformance
+# (see PROVENANCE.md for the exact upstream commit). ONLY this manifest differs:
+# the bts-rs workspace/path deps (edition.workspace, bts-json, bts-store*) are
+# replaced with concrete versions and the unused bts-json dependency is dropped,
+# so the crate builds on its own without the bts-rs workspace. This keeps the
+# bts-rs tree pristine (never modified, never committed to from here) while
+# letting Oracle A re-capture goldens into its OWN testdata/golden directory.
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+regex = "1"
+
+[[bin]]
+name = "capture_golden"
+path = "src/bin/capture_golden.rs"
+
+[[bin]]
+name = "scoreboard"
+path = "src/bin/scoreboard.rs"
