@@ -23,6 +23,9 @@ func (s *Store) SlotSet(ctx context.Context, issueID, key, value, actor string) 
 			return fmt.Errorf("parsing metadata for %s: %w", issueID, err)
 		}
 	}
+	if metadata == nil {
+		metadata = make(map[string]interface{})
+	}
 	metadata[key] = value
 
 	raw, err := json.Marshal(metadata)
