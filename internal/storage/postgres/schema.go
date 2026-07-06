@@ -476,6 +476,11 @@ func InitSchema(ctx context.Context, db *sql.DB, schema string) error {
 	}
 	defer conn.Close()
 
+	if err := lockSchemaInit(ctx, conn, schema); err != nil {
+		return err
+	}
+	defer func() { _ = unlockSchemaInit(context.Background(), conn, schema) }()
+
 	if _, err := conn.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS "`+schema+`"`); err != nil {
 		return fmt.Errorf("postgres: create schema %q: %w", schema, err)
 	}
@@ -499,6 +504,20 @@ func InitSchema(ctx context.Context, db *sql.DB, schema string) error {
 		if err := seedDefaultConfig(ctx, conn); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func lockSchemaInit(ctx context.Context, conn *sql.Conn, schema string) error {
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext('beads-postgres-schema-init'), hashtext($1))`, schema); err != nil {
+		return fmt.Errorf("postgres: acquire schema init lock %q: %w", schema, err)
+	}
+	return nil
+}
+
+func unlockSchemaInit(ctx context.Context, conn *sql.Conn, schema string) error {
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_unlock(hashtext('beads-postgres-schema-init'), hashtext($1))`, schema); err != nil {
+		return fmt.Errorf("postgres: release schema init lock %q: %w", schema, err)
 	}
 	return nil
 }
