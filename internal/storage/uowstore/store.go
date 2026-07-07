@@ -147,14 +147,14 @@ func (s *uowStore) GetReadyWorkWithCounts(ctx context.Context, filter types.Work
 // wisps table, and the caller's *types.Issue is mutated in place with the
 // minted ID (the use-case operates on the same pointer via CreateIssueParams).
 //
-// Label mapping is load-bearing: the embedded store persists issue.Labels (via
-// issueops.PersistLabels, which reads the *types.Issue), but the domain create
-// use-case reads only params.Labels — so the adapter must copy issue.Labels
-// across, or bd create silently drops every label on this path (#4547 red-team).
-// issue.Comments is NOT mapped: the create use-case has no comment path, and the
-// store-path bd create never populates Comments (comments arrive via bd comment
-// add). A full adapter that must round-trip imported comments needs a
-// comment-write gap unit — see SPIKE-REPORT §3.
+// Label/dependency mapping is load-bearing: the embedded store persists
+// issue.Labels and issue.Dependencies from the *types.Issue, but the domain
+// create use-case reads only params.Labels/params.Dependencies — so the adapter
+// must copy both across, or create-time labels/deps silently disappear on this
+// path (#4547 red-team). issue.Comments is NOT mapped: the create use-case has
+// no comment path, and the store-path bd create never populates Comments
+// (comments arrive via bd comment add). A full adapter that must round-trip
+// imported comments needs a comment-write gap unit — see SPIKE-REPORT §3.
 func (s *uowStore) CreateIssue(ctx context.Context, issue *types.Issue, actor string) error {
 	if issue == nil {
 		return fmt.Errorf("issue must not be nil")
@@ -163,7 +163,11 @@ func (s *uowStore) CreateIssue(ctx context.Context, issue *types.Issue, actor st
 		return err
 	}
 
-	params := domain.CreateIssueParams{Issue: issue, Labels: issue.Labels}
+	params := domain.CreateIssueParams{
+		Issue:        issue,
+		Labels:       issue.Labels,
+		Dependencies: createDependencySpecs(issue),
+	}
 	return uow.RunInTxMsg(ctx, s.provider, func(u uow.UnitOfWork) (string, error) {
 		var (
 			res domain.CreateIssueResult
@@ -185,6 +189,35 @@ func (s *uowStore) CreateIssue(ctx context.Context, issue *types.Issue, actor st
 		}
 		return fmt.Sprintf("bd: create %s", res.Issue.ID), nil
 	})
+}
+
+func createDependencySpecs(issue *types.Issue) []domain.DependencySpec {
+	if issue == nil || len(issue.Dependencies) == 0 {
+		return nil
+	}
+
+	specs := make([]domain.DependencySpec, 0, len(issue.Dependencies))
+	for _, dep := range issue.Dependencies {
+		if dep == nil || dep.DependsOnID == "" {
+			continue
+		}
+
+		depType := dep.Type
+		if depType == "" {
+			depType = types.DepBlocks
+		}
+		spec := domain.DependencySpec{
+			Type:     depType,
+			TargetID: dep.DependsOnID,
+			Metadata: dep.Metadata,
+		}
+		if issue.ID != "" && dep.IssueID != "" && dep.IssueID != issue.ID && dep.DependsOnID == issue.ID {
+			spec.TargetID = dep.IssueID
+			spec.SwapDirection = true
+		}
+		specs = append(specs, spec)
+	}
+	return specs
 }
 
 // CloseIssue mirrors EmbeddedDoltStore.CloseIssue: the raw close op only

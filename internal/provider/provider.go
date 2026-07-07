@@ -858,6 +858,10 @@ func (s *Session) SearchIssues(ctx context.Context, query string, filter backend
 	return s.Store.SearchIssues(ctx, query, filter)
 }
 
+func (s *Session) SearchIssueIDs(ctx context.Context, query string, filter backendplugin.IssueFilter) ([]string, error) {
+	return s.Store.SearchIssueIDs(ctx, query, filter)
+}
+
 func (s *Session) SearchIssuesWithCounts(ctx context.Context, query string, filter backendplugin.IssueFilter) ([]*backendplugin.IssueWithCounts, error) {
 	return s.Store.SearchIssuesWithCounts(ctx, query, filter)
 }

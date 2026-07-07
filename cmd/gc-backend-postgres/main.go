@@ -646,15 +646,16 @@ type tracer struct {
 }
 
 type traceEntry struct {
-	Timestamp  string `json:"ts"`
-	PID        int    `json:"pid"`
-	Backend    string `json:"backend"`
-	RequestID  string `json:"request_id,omitempty"`
-	Method     string `json:"method,omitempty"`
-	OK         bool   `json:"ok"`
-	ErrorCode  string `json:"error_code,omitempty"`
-	Error      string `json:"error,omitempty"`
-	DurationMS int64  `json:"duration_ms"`
+	Timestamp  string         `json:"ts"`
+	PID        int            `json:"pid"`
+	Backend    string         `json:"backend"`
+	RequestID  string         `json:"request_id,omitempty"`
+	Method     string         `json:"method,omitempty"`
+	OK         bool           `json:"ok"`
+	ErrorCode  string         `json:"error_code,omitempty"`
+	Error      string         `json:"error,omitempty"`
+	DurationMS int64          `json:"duration_ms"`
+	Details    map[string]any `json:"details,omitempty"`
 }
 
 func newTracer(opts options) (*tracer, error) {
@@ -713,6 +714,7 @@ func traceEntryFromResponse(start time.Time, req request, resp response) traceEn
 		code = resp.Error.Code
 		message = sanitizeTraceText(resp.Error.Message, 500)
 	}
+	details := traceDetails(req)
 	return traceEntry{
 		Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
 		PID:        os.Getpid(),
@@ -723,6 +725,26 @@ func traceEntryFromResponse(start time.Time, req request, resp response) traceEn
 		ErrorCode:  code,
 		Error:      message,
 		DurationMS: time.Since(start).Milliseconds(),
+		Details:    details,
+	}
+}
+
+func traceDetails(req request) map[string]any {
+	switch req.Method {
+	case "create_issue":
+		var p struct {
+			Issue *backendplugin.Issue `json:"issue"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil || p.Issue == nil {
+			return nil
+		}
+		return map[string]any{
+			"issue_id":         p.Issue.ID,
+			"issue_type":       p.Issue.IssueType,
+			"dependency_count": len(p.Issue.Dependencies),
+		}
+	default:
+		return nil
 	}
 }
 

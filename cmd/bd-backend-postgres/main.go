@@ -600,6 +600,20 @@ func handle(ctx context.Context, manager *provider.Manager, req backendplugin.Re
 			return errorResponse(req.ID, "search_issues_failed", err)
 		}
 		return ok(req.ID, issues)
+	case "search_issue_ids":
+		var p backendplugin.SearchIssuesParams
+		if err := decode(req.Params, &p); err != nil {
+			return errorResponse(req.ID, "bad_params", err)
+		}
+		s, err := manager.Get(p.SessionID)
+		if err != nil {
+			return errorResponse(req.ID, "unknown_session", err)
+		}
+		ids, err := s.SearchIssueIDs(ctx, p.Query, p.Filter)
+		if err != nil {
+			return errorResponse(req.ID, "search_issue_ids_failed", err)
+		}
+		return ok(req.ID, ids)
 	case "search_issues_with_counts":
 		var p backendplugin.SearchIssuesParams
 		if err := decode(req.Params, &p); err != nil {
@@ -2347,6 +2361,20 @@ func handle(ctx context.Context, manager *provider.Manager, req backendplugin.Re
 			return errorResponse(req.ID, "tx_search_issues_failed", err)
 		}
 		return ok(req.ID, issues)
+	case "tx_search_issue_ids":
+		var p backendplugin.SearchIssuesParams
+		if err := decode(req.Params, &p); err != nil {
+			return errorResponse(req.ID, "bad_params", err)
+		}
+		tx, err := manager.GetTransaction(p.SessionID)
+		if err != nil {
+			return errorResponse(req.ID, "unknown_transaction", err)
+		}
+		ids, err := tx.SearchIssueIDs(ctx, p.Query, p.Filter)
+		if err != nil {
+			return errorResponse(req.ID, "tx_search_issue_ids_failed", err)
+		}
+		return ok(req.ID, ids)
 	case "tx_add_dependency":
 		var p backendplugin.DependencyParams
 		if err := decode(req.Params, &p); err != nil {
